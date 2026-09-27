@@ -138,14 +138,17 @@ function saveSolo(flash = true) {
 setInterval(() => { if (local && G && G.mapId === BANK && G.state === 'play') saveSolo(); }, 30000);
 addEventListener('beforeunload', () => { if (local && G?.state === 'play') saveSolo(false); });
 let lastPump = performance.now();
+/** Solo heists stop dead while you're in the pause menu (or the help page from it, or another tab). */
+const soloPaused = () => local && G && G.mapId === BANK && G.state === 'play' && (screen === 'scr-pause' || screen === 'scr-help' && prevScreen === 'scr-pause' || document.hidden);
 function pump() {
   if (!local) return;
   const t = performance.now(), dt = Math.min(0.1, (t - lastPump) / 1000); lastPump = t;
+  if (soloPaused()) { for (const m of local.inbox.splice(0)) onMsg(m); return; }
   if (dt > 0) local.room.tick(dt);
   const box = local.inbox.splice(0);
   for (const m of box) onMsg(m);
 }
-setInterval(() => { if (document.hidden) pump(); }, 50);
+setInterval(() => { if (document.hidden && !local) pump(); }, 50);
 
 // ------------------------------------------------------------------ online
 let ws = null, wasConnected = false, wantOnline = false;
@@ -572,7 +575,7 @@ document.addEventListener('pointerlockchange', () => {
   else { mouseHeld = aimHeld = false; if (G && G.mapId === BANK && !chatting && screen !== 'scr-end' && !shopOpen) pause(); }
 });
 function unlock() { if (document.pointerLockElement) document.exitPointerLock(); if (macLocked) { macLocked = false; window.webkit?.messageHandlers?.gp?.postMessage('unlock'); } }
-function pause() { if (!G) return; keys.clear(); show('scr-pause'); $('clickto').classList.add('hidden'); }
+function pause() { if (!G) return; keys.clear(); mouseHeld = aimHeld = false; touch.fire = touch.act = false; show('scr-pause'); $('clickto').classList.add('hidden'); $('p-note').textContent = local ? 'The heist is paused — nothing moves until you press RESUME.' : "Online heists can't pause — your crew is still playing!"; }
 $('p-resume').onclick = () => { sfx.click(); show(null); if (isMac) askLock(); else if (!mobile) canvas.requestPointerLock?.(); };
 $('p-leave').onclick = () => { sfx.click(); leaveAll(); };
 $('sens').value = prof.sens; $('sens').oninput = () => { prof.sens = +$('sens').value; store.set('sens', prof.sens); };
@@ -1158,7 +1161,9 @@ function frame() {
   const T0 = performance.now();
   pump();
   const T1 = performance.now();
-  if (G) {
+  if (G && soloPaused()) {
+    ambience.update(dt, { place: 'bank', inside: true, people: 0, drill: -1, alarm: 0, sirens: 0, heli: -1 });
+  } else if (G) {
     updateLocal(dt);
     updateEnts(dt);
     updateCamera(dt);
@@ -1182,7 +1187,7 @@ if (!Q.has('icon') && !Q.has('audiotest')) {
   if (Q.has('help')) show('scr-help');
   if (Q.has('soloscreen')) { show('scr-solo'); drawPlans(); }
 }
-window.__gh = { get G() { return G; }, me, ME, world, send, get room() { return room; }, get local() { return local; }, prof, touch, target };
+window.__gh = { get G() { return G; }, pause, resume: () => $('p-resume').click(), me, ME, world, send, get room() { return room; }, get local() { return local; }, prof, touch, target };
 if (Q.has('icon')) import('./icon.js').then(m => m.renderIcon());
 if (Q.has('audiotest')) import('./sfx.js').then(async m => {
   document.body.innerHTML = '<pre id="at" style="position:fixed;inset:0;margin:0;padding:10px;background:#000;color:#0f0;font:12px monospace;column-count:3;z-index:999"></pre>';
