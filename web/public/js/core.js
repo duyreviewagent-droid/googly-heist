@@ -312,7 +312,7 @@ export class Room {
   dropBag(p, throwDir = null) {
     const b = this.bags.get(p.carry); p.carry = null; if (!b) return;
     b.by = 0;
-    b.x = p.x - Math.sin(p.yaw) * 0.5; b.z = p.z - Math.cos(p.yaw) * 0.5; b.y = p.y + 1.2;
+    b.x = p.x; b.z = p.z; b.y = p.y + 0.9;
     if (throwDir) {
       const sp = BAG[b.kind]?.throw || 6, [dx, dy, dz] = throwDir, l = Math.hypot(dx, dz) || 1;
       b.vx = dx / l * sp + p.vx * 0.5; b.vz = dz / l * sp + p.vz * 0.5; b.vy = 3.2 + clamp(dy, -0.5, 0.8) * sp * 0.6;
@@ -326,20 +326,21 @@ export class Room {
       if (b.kind === 'ammo' && this.clock - (b.born ?? this.clock) > 45) { this.bags.delete(b.id); this.bcast({ t: 'bag', rm: [b.id] }); continue; }
       if (b.by) { const p = this.players.get(b.by); if (p) { b.x = p.x; b.y = p.y + 1; b.z = p.z; } else b.by = 0; continue; }
       if (!b.fly) continue;
-      const n = 3;
+      // the bag is a round lump ~0.3 m across: it bumps off walls, counters, cars and the van instead of going through
+      const n = Math.max(3, Math.ceil(Math.hypot(b.vx, b.vy, b.vz) * dt / 0.12)), R = BAG_R;
       for (let i = 0; i < n; i++) {
-        const h = dt / n, ox = b.x, oy = b.y, oz = b.z;
+        const h = dt / n;
         b.vy -= S.GRAV * h; b.x += b.vx * h; b.y += b.vy * h; b.z += b.vz * h;
-        const hit = S.segMap(this.map, ox, oy + 0.25, oz, b.x, b.y + 0.25, b.z, 'solid');
-        if (hit && hit.c) {
-          b.x = ox + (b.x - ox) * hit.t; b.z = oz + (b.z - oz) * hit.t; b.y = oy + (b.y - oy) * hit.t;
-          if (hit.n[1] > 0.5) { b.y = hit.c.y + hit.c.h; b.vy = 0; b.vx *= 0.3; b.vz *= 0.3; }
-          else { if (hit.n[0]) b.vx *= -0.25; if (hit.n[2]) b.vz *= -0.25; b.x += hit.n[0] * 0.05; b.z += hit.n[2] * 0.05; }
-          // into the back of the van?
-          if (hit.c.kind === 'van' && this.van.state === 'here' && b.kind !== 'key') { this.secure(b, b.thrower); break; }
-        }
-        const g = S.groundAt(this.map, b.x, b.z, 0.2, b.y + 0.3);
-        if (b.y <= g) { b.y = g; b.vy = 0; b.vx *= 0.5; b.vz *= 0.5; if (Math.hypot(b.vx, b.vz) < 0.4) { b.fly = false; b.vx = b.vz = 0; } }
+        const vanBox = this.map.colliders.find(c => c.kind === 'van');
+        const hitVan = this.van.state === 'here' && vanBox && Math.abs(b.x - vanBox.x) < vanBox.w / 2 + R && Math.abs(b.z - vanBox.z) < vanBox.d / 2 + R && b.y < vanBox.h + R;
+        if (hitVan && b.kind !== 'key' && b.kind !== 'ammo') { this.secure(b, b.thrower); break; }
+        const nrm = S.pushOut(b, this.map, R, 0.5, 'crew');
+        if (nrm) { const vn = b.vx * nrm[0] + b.vz * nrm[1]; if (vn < 0) { b.vx -= 1.35 * vn * nrm[0]; b.vz -= 1.35 * vn * nrm[1]; } b.vx *= 0.6; b.vz *= 0.6; }
+        // ceilings (and the underside of anything overhead)
+        const up = S.segMap(this.map, b.x, b.y + 0.2, b.z, b.x, b.y + 0.5, b.z, 'solid');
+        if (up && b.vy > 0) { b.vy = -b.vy * 0.2; b.y -= 0.05; }
+        const g = S.groundAt(this.map, b.x, b.z, R, b.y + 0.35, 'crew');
+        if (b.y <= g) { b.y = g; if (b.vy < -2) b.vy = -b.vy * 0.25; else b.vy = 0; b.vx *= 0.55; b.vz *= 0.55; if (Math.hypot(b.vx, b.vz) < 0.4 && b.vy === 0) { b.fly = false; b.vx = b.vz = 0; break; } }
       }
       if (!this.bags.has(b.id) || b.secured) continue;
       if (!b.fly) {
@@ -501,7 +502,7 @@ export class Room {
     let best = w ? w.t * R : R, hitN = null, head = false;
     for (const n of this.npcs.values()) {
       if (n.hp <= 0 || n.zapT > 0 && !isCop(n)) continue;
-      const r = S.rayBody(o[0], o[1], o[2], d[0], d[1], d[2], n, best); if (r && r.d < best) { best = r.d; hitN = n; head = r.head; }
+      const r = S.rayBody(o[0], o[1], o[2], d[0], d[1], d[2], { x: n.x, y: n.y, z: n.z, pose: npcPose(n), big: n.kind === 'heavy' }, best); if (r && r.d < best) { best = r.d; hitN = n; head = r.head; }
     }
     // cameras are little targets high on the walls
     let cam = -1;
@@ -824,10 +825,12 @@ export class Room {
     this.pushRoom();
   }
 }
+const BAG_R = 0.3;
 const CARRY_I = { cash: 1, gold: 2, diamond: 3, drill: 4 };
 export const CARRY_KINDS = [null, 'cash', 'gold', 'diamond', 'drill'];
 const ACT_I = { revive: 2, lockpick: 3, deposit: 3, atm: 3, safe: 3, cams: 3, fixDrill: 3, cuff: 4, bag: 5, truckbag: 5 };
 function crewFlags(R, p) { return (p.masked ? 1 : 0) | (p.onGround ? 2 : 0) | (p.down ? 4 : 0) | (p.crouch ? 8 : 0) | (p.custodyT > 0 ? 16 : 0) | (p.aim || p.fireT > 0.05 ? 32 : 0) | (p.reloadT > 0 ? 128 : 0) | (p.shoutT > 0.6 ? 256 : 0) | (p.keycard ? 512 : 0); }
+export const npcPose = n => n.zapT > 0 || n.hp <= 0 ? 'lie' : n.hostage || n.cuffed || n.state === 'sit' || n.seat && n.state === 'idle' ? 'sit' : n.state === 'cower' || n.crouch ? 'crouch' : 'stand';
 export const isCop = n => n.kind === 'cop' || n.kind === 'swat' || n.kind === 'heavy';
 
 // =================================================================== the people in the bank, and the police

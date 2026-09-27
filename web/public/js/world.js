@@ -744,7 +744,7 @@ export class World {
     const g = makeBag(b.kind); g.position.set(b.x, b.y + 0.2, b.z); g.rotation.y = Math.random() * 6;
     if (b.kind === 'key') { const glow = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.26, 24), new THREE.MeshBasicMaterial({ color: 0x4ad8ff, transparent: true, opacity: 0.7, side: THREE.DoubleSide })); glow.rotation.x = -Math.PI / 2; glow.position.y = -0.18; g.add(glow); }
     this.bagsG.add(g);
-    const v = { g, b: { ...b }, vel: b.fly ? new THREE.Vector3(...b.fly) : null };
+    const v = { g, b: { ...b }, flying: !!b.fly, target: null };
     this.bagViews.set(b.id, v);
     g.visible = !b.by;
     return v;
@@ -752,9 +752,9 @@ export class World {
   updBag(b) {
     const v = this.bagViews.get(b.id); if (!v) return this.addBag(b);
     v.b = { ...b }; v.g.visible = !b.by;
-    if (b.fly) { v.vel = new THREE.Vector3(...b.fly); v.g.position.set(b.x, b.y, b.z); } else { v.vel = null; v.g.position.set(b.x, b.y + 0.2, b.z); }
+    v.flying = !!b.fly; v.target = new THREE.Vector3(b.x, b.y + 0.2, b.z); if (!b.fly && v.g.position.distanceTo(v.target) > 3) v.g.position.copy(v.target);
   }
-  moveBag(id, x, y, z) { const v = this.bagViews.get(id); if (v) { v.target = new THREE.Vector3(x, y + 0.2, z); } }
+  moveBag(id, x, y, z) { const v = this.bagViews.get(id); if (v) { v.flying = true; v.target = new THREE.Vector3(x, y + 0.2, z); } }
   rmBag(id) { const v = this.bagViews.get(id); if (v) { this.bagsG.remove(v.g); this.bagViews.delete(id); } }
   // ------------------------------------------------------------------ bullets and sparks
   tracer(o, h, color = 0x4ad8ff) {
@@ -891,8 +891,8 @@ export class World {
     if (h && h.on) { h.t += dt; const a = h.t * 0.12; h.g.position.set(Math.cos(a) * 34, 32 + Math.sin(h.t * 0.5), Math.sin(a) * 30 - 10); h.g.rotation.y = -a; h.rotor.rotation.y += dt * 30; h.rotor2.rotation.y += dt * 30; h.spot.target.position.set(Math.sin(h.t * 0.3) * 8, -30, Math.cos(h.t * 0.4) * 8); h.beam.lookAt(h.spot.target.getWorldPosition(new THREE.Vector3())); h.beam.rotateX(-Math.PI / 2); h.beam.position.set(0, 0, 0); h.beam.translateY(-15); }
     // bags in flight (client-side ballistic prediction, corrected by the server)
     for (const bv of this.bagViews.values()) {
-      if (bv.vel) { bv.vel.y -= 20 * dt; bv.g.position.addScaledVector(bv.vel, dt); if (bv.g.position.y < 0.2) { bv.g.position.y = 0.2; bv.vel.multiplyScalar(0.4); bv.vel.y = 0; } bv.g.rotation.x += dt * 6; }
-      if (bv.target) { bv.g.position.lerp(bv.target, 1 - Math.exp(-14 * dt)); }
+      if (bv.target) bv.g.position.lerp(bv.target, 1 - Math.exp(-(bv.flying ? 20 : 12) * dt));
+      if (bv.flying) bv.g.rotation.x += dt * 5;
       if (bv.b.kind === 'key' || bv.b.kind === 'ammo') bv.g.rotation.y += dt * 2;
     }
     // hide the roof when the camera is inside (so we see the ceiling instead of its underside, and outdoor shadow stays)

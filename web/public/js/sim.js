@@ -154,21 +154,61 @@ export const eyeOf = p => [p.x, p.y + (p.crouch ? EYEC : EYE), p.z];
 export const chestOf = p => [p.x, p.y + (p.down ? 0.3 : p.crouch ? 0.72 : 1.0), p.z];
 export const headOf = p => [p.x, p.y + (p.down ? 0.4 : (p.crouch ? PHC : PH) - 0.18), p.z];
 export const seesBody = (map, eye, q) => canSee(map, eye, headOf(q)) || canSee(map, eye, chestOf(q));
-/** Where does a ray from o along unit dir d hit a standing body q (a cylinder)? returns distance or -1, and whether it's the head. */
-export function rayBody(ox, oy, oz, dx, dy, dz, q, maxD) {
-  const r = q.down ? 0.55 : 0.42, top = q.y + (q.down ? 0.6 : q.crouch ? PHC : PH);
-  const fx = ox - q.x, fz = oz - q.z, A = dx * dx + dz * dz;
-  if (A < 1e-9) return null;
-  const B = 2 * (fx * dx + fz * dz), C = fx * fx + fz * fz - r * r, disc = B * B - 4 * A * C;
-  if (disc < 0) return null;
-  const s = Math.sqrt(disc);
-  for (const t of [(-B - s) / (2 * A), (-B + s) / (2 * A)]) {
-    if (t < 0 || t > maxD) continue;
-    const y = oy + dy * t;
-    if (y >= q.y && y <= top) return { d: t, head: !q.down && y > top - 0.42 };
+/** The shape a googly's body has for bullets: a vertical capsule that fits the jelly bean (smaller when sitting or ducking). */
+export function bodyShape(q) {
+  const k = q.big ? 1.12 : 1;
+  switch (q.pose) {
+    case 'lie': return { r: 0.5, h: 0.62, head: 0 };
+    case 'sit': return { r: 0.37 * k, h: 1.22 * k, head: 0.38 * k };
+    case 'crouch': return { r: 0.36 * k, h: 1.32 * k, head: 0.4 * k };
+    default: return { r: 0.35 * k, h: 1.67 * k, head: 0.42 * k };
   }
-  // straight down/up through the top cap
-  return null;
+}
+/** Where a ray from o along unit dir d first touches body q ({x,y,z,pose,big}): { d, head } or null. */
+export function rayBody(ox, oy, oz, dx, dy, dz, q, maxD) {
+  const { r, h, head } = bodyShape(q);
+  const y0 = q.y + r, y1 = q.y + Math.max(r, h - r);
+  let best = Infinity;
+  // the straight middle
+  const fx = ox - q.x, fz = oz - q.z, A = dx * dx + dz * dz;
+  if (A > 1e-9) {
+    const B = 2 * (fx * dx + fz * dz), C = fx * fx + fz * fz - r * r, disc = B * B - 4 * A * C;
+    if (disc >= 0) { const t = (-B - Math.sqrt(disc)) / (2 * A); if (t >= 0) { const y = oy + dy * t; if (y >= y0 && y <= y1) best = t; } }
+  }
+  // the round top and bottom
+  for (const cy of [y0, y1]) {
+    const px = ox - q.x, py = oy - cy, pz = oz - q.z;
+    const b = px * dx + py * dy + pz * dz, c = px * px + py * py + pz * pz - r * r, disc = b * b - c;
+    if (disc < 0) continue;
+    const t = -b - Math.sqrt(disc);
+    if (t >= 0 && t < best) { const y = oy + dy * t; if (cy === y0 ? y <= y0 : y >= y1) best = t; }
+  }
+  if (best > maxD) return null;
+  const y = oy + dy * best;
+  return { d: best, head: head > 0 && y > q.y + h - head };
+}
+/** Push a round thing (radius r, height h) out of anything solid it overlaps; returns the push normal or null. */
+export function pushOut(p, map, r, h, who = 'npc') {
+  let nx = 0, nz = 0;
+  near(map, p.x - r - 0.1, p.z - r - 0.1, p.x + r + 0.1, p.z + r + 0.1, c => {
+    if (!blocks(map, c, who)) return;
+    if (p.y + h <= c.y + 0.01 || p.y >= c.y + c.h - 0.01) return;
+    if (c.t === 'b') {
+      const lx = c.x - c.w / 2, lz = c.z - c.d / 2, qx = clamp(p.x, lx, lx + c.w), qz = clamp(p.z, lz, lz + c.d);
+      let dx = p.x - qx, dz = p.z - qz, d = Math.hypot(dx, dz);
+      if (d >= r) return;
+      if (d < 1e-6) { const ex = [p.x - lx, lx + c.w - p.x, p.z - lz, lz + c.d - p.z], i = ex.indexOf(Math.min(...ex)); dx = [-1, 1, 0, 0][i]; dz = [0, 0, -1, 1][i]; d = 0; const push = ex[i] + r; p.x += dx * push; p.z += dz * push; }
+      else { p.x = qx + dx / d * r; p.z = qz + dz / d * r; dx /= d; dz /= d; }
+      nx += dx; nz += dz;
+    } else {
+      let dx = p.x - c.x, dz = p.z - c.z; const d = Math.hypot(dx, dz), m = c.r + r;
+      if (d >= m) return;
+      if (d < 1e-6) { dx = 1; dz = 0; } else { dx /= d; dz /= d; }
+      p.x = c.x + dx * m; p.z = c.z + dz * m; nx += dx; nz += dz;
+    }
+  });
+  const l = Math.hypot(nx, nz);
+  return l > 0 ? [nx / l, nz / l] : null;
 }
 
 // ------------------------------------------------------------------ navigation: a flat grid of walkable cells

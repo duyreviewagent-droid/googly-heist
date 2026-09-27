@@ -745,7 +745,7 @@ function aimPoint() {
   const cam = world.camera, o = cam.position, d = V2.set(0, 0, -1).applyQuaternion(cam.quaternion);
   const R = 70, w = S.segMap(G.map, o.x, o.y, o.z, o.x + d.x * R, o.y + d.y * R, o.z + d.z * R, 'shot');
   let best = w ? w.t * R : R;
-  for (const n of G.npcs.values()) { if (n.flags & 8) continue; const r = S.rayBody(o.x, o.y, o.z, d.x, d.y, d.z, { x: n.x, y: 0, z: n.z, crouch: !!(n.flags & (1 | 2 | 16384)) }, best); if (r && r.d < best && r.d > 1.2) best = r.d; }
+  for (const n of G.npcs.values()) { if (n.flags & 8) continue; const f = n.flags, r = S.rayBody(o.x, o.y, o.z, d.x, d.y, d.z, { x: n.x, y: 0, z: n.z, pose: f & (1 | 2 | 8192) ? 'sit' : f & 16384 ? 'crouch' : 'stand', big: n.kind === 'heavy' }, best); if (r && r.d < best && r.d > 1.2) best = r.d; }
   G.map.cams.forEach((c, i) => { if (G.cams[i] === 'broken') return; const fx = c.x - o.x, fy = c.y - o.y, fz = c.z - o.z, t = fx * d.x + fy * d.y + fz * d.z; if (t < 0 || t > best) return; const px = o.x + d.x * t - c.x, py = o.y + d.y * t - c.y, pz = o.z + d.z * t - c.z; if (px * px + py * py + pz * pz < 0.09) best = t; });
   return new THREE.Vector3(o.x + d.x * best, o.y + d.y * best, o.z + d.z * best);
 }
