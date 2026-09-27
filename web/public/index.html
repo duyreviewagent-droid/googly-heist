@@ -1,1 +1,198 @@
-<!doctype html><meta charset="utf-8"><title>Googly Heist</title><body style="background:#111;color:#fff;font-family:system-ui;display:grid;place-items:center;height:100vh"><h1>Googly Heist — coming soon</h1></body>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0e16">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Googly Heist</title>
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{ "imports": { "three": "/three/three.module.js", "three/addons/": "/three/addons/" } }</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<!-- title -->
+<section id="scr-title" class="screen">
+  <div class="card">
+    <div class="tcol">
+    <h1><span class="g">GOOGLY</span> <span class="s">HEIST</span></h1>
+    <p class="sub">Rob First Googly National Bank with a crew of 4 · 30 minutes until the van leaves</p>
+    <div id="invite" class="banner hidden"></div>
+    <input id="nm" maxlength="14" placeholder="Your name" autocomplete="off">
+    <div id="swatches"></div>
+    </div><div class="tcol">
+    <div class="coinrow"><span class="cash">💰 $<b id="t-cash">0</b> stashed</span><button id="b-shop" class="gold">🎭 SHOP · masks &amp; skins</button></div>
+    <button id="b-solo" class="big green wide">▶ PLAY SOLO<small>you + 3 computer robbers · starts right away</small></button>
+    <button id="b-continue" class="big brown wide hidden">↻ CONTINUE SOLO HEIST<small id="continue-sub"></small></button>
+    <button id="b-online" class="big blue wide">PLAY ONLINE<small>optional · lobbies · codes · invite up to 3 friends</small></button>
+    <div class="row"><button id="b-fs" class="grey">⛶ Full screen</button><button id="b-music" class="grey">♪ Music</button><button id="b-sfx" class="grey">🔊 Sound</button><button id="b-help" class="grey">? How to play</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- solo setup -->
+<section id="scr-solo" class="screen hidden">
+  <div class="card wide">
+    <h2>PLAY SOLO</h2>
+    <p class="sub">You and 3 computer robbers. The heist lasts 30 minutes — the van leaves at 30:00.</p>
+    <div class="label">THE PLAN</div>
+    <div class="plans" id="solo-plan">
+      <div class="plan" data-v="stealth"><span class="em">🤫</span>STEALTH FIRST<small>Walk in like customers. Your crew waits until you put your mask on. Cameras, guards and witnesses can raise the alarm.</small></div>
+      <div class="plan" data-v="loud"><span class="em">💥</span>GO LOUD<small>Masks on, blasters out. The police show up fast and keep coming in waves.</small></div>
+    </div>
+    <div class="grid3">
+      <label>Police <select id="solo-d"><option value="0">Easy</option><option value="1">Normal</option><option value="2">Hard</option></select></label>
+    </div>
+    <div class="row"><button id="solo-go" class="big green">START THE HEIST</button><button class="back grey">BACK</button></div>
+  </div>
+</section>
+
+<!-- online -->
+<section id="scr-online" class="screen hidden">
+  <div class="card wide">
+    <h2>PLAY ONLINE</h2>
+    <p class="tiny" id="on-status">Connecting to the server…</p>
+    <div class="row"><button id="on-pub" class="green">+ PUBLIC LOBBY</button><button id="on-priv" class="blue">🔒 PRIVATE LOBBY</button></div>
+    <div class="row"><input id="on-code" class="codebox" maxlength="4" placeholder="CODE" autocomplete="off"><button id="on-join" class="gold">JOIN WITH CODE</button></div>
+    <p class="sub">Open lobbies <button id="on-ref" class="mini grey">↻</button></p>
+    <div id="rooms"></div>
+    <div class="row"><button class="back grey">BACK</button></div>
+  </div>
+</section>
+
+<!-- shop -->
+<section id="scr-shop" class="screen hidden">
+  <div class="card shop">
+    <div class="shoptop"><h2>SHOP</h2><span class="cash big">💰 $<b id="s-cash">0</b></span></div>
+    <div class="seg" id="shop-tab"><button data-v="masks" class="on">MASKS</button><button data-v="skins">SKINS</button><button data-v="colors">COLOURS</button></div>
+    <div id="shop-grid"></div>
+    <p class="tiny">Your cut of every heist goes in your stash: the crew splits the take four ways. Escape with more to buy more.</p>
+    <div class="row"><button id="shop-close" class="big green">DONE</button></div>
+  </div>
+</section>
+
+<!-- lobby panel: walk around the Hideout while you wait -->
+<div id="lobbyui" class="hidden">
+  <div class="lp">
+    <div class="lobbytop">
+      <div><small>LOBBY CODE</small><div id="lb-code" class="bigcode">----</div></div>
+      <div class="col"><button id="lb-copy" class="gold mini2">🔗 Copy invite</button><button id="lb-share" class="grey mini2 hidden">Share…</button></div>
+    </div>
+    <div class="label">THE CREW <small id="lb-count"></small></div>
+    <div id="lb-players"></div>
+    <div id="lb-summary" class="summary hidden"></div>
+    <div id="lb-hostctl">
+      <div class="label">THE PLAN</div>
+      <div class="plans small" id="lb-plan">
+        <div class="plan" data-v="stealth"><span class="em">🤫</span>STEALTH FIRST</div>
+        <div class="plan" data-v="loud"><span class="em">💥</span>GO LOUD</div>
+      </div>
+      <div class="grid2">
+        <label>Police <select id="lb-diff"><option value="0">Easy</option><option value="1">Normal</option><option value="2">Hard</option></select></label>
+        <label>Empty spots <select id="lb-cpus"><option value="1">Computer robbers</option><option value="0">Nobody</option></select></label>
+      </div>
+      <label class="chk"><input type="checkbox" id="lb-pub"> Show in the public lobby list</label>
+    </div>
+    <div id="lb-wait" class="tiny"></div>
+    <div id="lb-chat"><div id="lb-log"></div><form id="lb-form"><input id="lb-msg" maxlength="140" placeholder="Say something… (Enter)" autocomplete="off"><button class="grey">Send</button></form></div>
+    <div class="row"><button id="lb-start" class="big green">START THE HEIST</button></div>
+    <div class="row"><button id="lb-shop" class="gold">🎭 SHOP</button><button id="lb-leave" class="grey">LEAVE</button><button id="lb-hide" class="grey">◀ Hide panel</button></div>
+  </div>
+  <button id="lb-show" class="blue hidden">LOBBY ▶</button>
+  <div id="lb-hint" class="tiny">WASD walk · Space jump · drag the screen to look · T or Enter to chat · the mask wall is the shop</div>
+</div>
+
+<!-- in-game HUD -->
+<div id="hud" class="hidden">
+  <div id="vign"></div>
+  <div id="dmgdirs"></div>
+  <div id="clockpill" class="pill"><small id="banktime">4:00 PM</small><b id="clock">30:00</b><div id="phase">STEALTH</div></div>
+  <div id="obj" class="pill"></div>
+  <div id="take" class="pill"><small>SECURED</small><b id="t-take">$0</b><div id="t-van"></div><div id="t-host"></div></div>
+  <div id="minimap" class="pill"><canvas id="mm" width="200" height="200"></canvas></div>
+  <div id="crew"></div>
+  <div id="vitals" class="pill">
+    <div class="bar armor" id="b-armor"><span>🛡</span><div><i></i></div><b></b></div>
+    <div class="bar" id="b-hp"><span>❤️</span><div><i></i></div><b></b></div>
+    <div id="ammo"><b id="a-mag">30</b><small id="a-res">/ 180</small></div>
+    <div id="carry"></div>
+  </div>
+  <div id="cross"><i></i><i></i><i></i><i></i></div>
+  <div id="hitm"></div>
+  <div id="detm"><div class="eye">👁</div><div class="fill"><i></i></div></div>
+  <div id="ring" class="hidden"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" class="bg"/><circle cx="50" cy="50" r="42" class="fg" id="ring-fg"/></svg><span id="ring-t"></span></div>
+  <div id="feed"></div>
+  <div id="center"></div>
+  <div id="prompt"></div>
+  <div id="hint"></div>
+  <div id="board" class="hidden"></div>
+  <div id="chatbox"><div id="log"></div><form id="chatform" class="hidden"><input id="chatin" maxlength="140" placeholder="Chat… (Enter to send, Esc to cancel)" autocomplete="off"></form></div>
+  <div id="keys" class="tiny kbonly"></div>
+  <div id="downscr" class="hidden"><div class="em">😵</div><h2 id="down-h">YOU'RE DOWN</h2><p id="down-p"></p></div>
+  <div id="saved">SAVED</div>
+  <!-- touch -->
+  <div id="stick" class="touch"><div id="knob"></div></div>
+  <button id="t-fire" class="touch tbtn red">FIRE</button>
+  <button id="t-aim" class="touch tbtn grey">AIM</button>
+  <button id="t-act" class="touch tbtn green">USE</button>
+  <button id="t-shout" class="touch tbtn gold">SHOUT</button>
+  <button id="t-mask" class="touch tbtn purple">MASK</button>
+  <button id="t-throw" class="touch tbtn brown">THROW</button>
+  <button id="t-reload" class="touch tbtn grey">RELOAD</button>
+  <button id="t-jump" class="touch tbtn grey">JUMP</button>
+  <button id="t-crouch" class="touch tbtn grey">CROUCH</button>
+  <div id="tbar" class="touch"><button id="t-board" class="grey" aria-label="Crew">🏆</button><button id="t-chat" class="grey" aria-label="Chat">💬</button><button id="t-menu" class="grey" aria-label="Menu">☰</button></div>
+</div>
+<div id="clickto" class="hidden"><div>CLICK TO PLAY<small>(mouse looks around · Esc for menu)</small></div></div>
+
+<!-- pause -->
+<section id="scr-pause" class="screen hidden">
+  <div class="card">
+    <h2>PAUSED</h2>
+    <p class="tiny" id="p-note">The heist keeps going while you're in this menu!</p>
+    <label class="slider"><span class="kbonly">Mouse speed</span><span class="touchonly">Look speed</span> <input type="range" id="sens" min="0.2" max="3" step="0.05"></label>
+    <label class="chk"><input type="checkbox" id="invy"> Invert <span class="kbonly">mouse</span><span class="touchonly">look</span> Y</label>
+    <div class="vols"><label>♪ Music <input type="range" id="vol-music" min="0" max="1" step="0.05"></label><label>🔊 Effects <input type="range" id="vol-sfx" min="0" max="1" step="0.05"></label><label>🏙 City sounds <input type="range" id="vol-amb" min="0" max="1" step="0.05"></label></div>
+    <div class="row"><button id="p-music" class="grey">♪ Music</button><button id="p-sfx" class="grey">🔊 Sound</button><button id="p-fs" class="grey">⛶ Full screen</button><button id="p-help" class="grey">? Help</button></div>
+    <div class="row"><button id="p-resume" class="big green">RESUME</button><button id="p-leave" class="red">LEAVE HEIST</button></div>
+  </div>
+</section>
+
+<!-- end of the heist -->
+<section id="scr-end" class="screen hidden">
+  <div class="card wide">
+    <div id="end-grade">S</div>
+    <h2 id="end-title">THE GETAWAY</h2>
+    <p id="end-sub" class="sub"></p>
+    <div id="end-take"></div>
+    <div id="end-awards"></div>
+    <div id="end-list"></div>
+    <div id="end-cut" class="banner hidden"></div>
+    <p class="tiny" id="end-t"></p>
+    <div class="row"><button id="end-again" class="big green hidden">ANOTHER HEIST</button><button id="end-lobby" class="blue hidden">BACK TO THE HIDEOUT</button><button id="end-leave" class="grey">LEAVE</button></div>
+  </div>
+</section>
+
+<!-- help -->
+<section id="scr-help" class="screen hidden">
+  <div class="card wide help">
+    <h2>HOW TO PLAY</h2>
+    <p><b>The job:</b> rob <b>First Googly National Bank</b> with your crew of four (friends or computer robbers). You have <b>30 minutes</b>. The getaway van waits in the <b>alley</b> behind the bank, and at 30:00 it leaves. Anyone who isn't there gets left behind.</p>
+    <p><b>Casing:</b> you start as a customer. Nobody cares about you until you put on your <b>mask</b> (hold <b><span class="kbonly">G</span><span class="touchonly">MASK</span></b>). Masked robbers get noticed: witnesses show a <b>?</b> that turns into a <b>!</b>, and then they call the police. The <b>cameras</b> feed the security room: turn them off there (or deal with the guard) to stay quiet. You can pickpocket the <b>manager's keycard</b> without a mask, from behind.</p>
+    <p><b>Crowd control:</b> <b><span class="kbonly">F</span><span class="touchonly">SHOUT</span></b> "GET DOWN!" makes everyone in front of you drop (guards put their hands up). Hold <b><span class="kbonly">E</span><span class="touchonly">USE</span></b> on a hostage or a guard to tie them up for good.</p>
+    <p><b>The vault:</b> get the <b>keycard</b> (or pick the staff door lock), open the <b>vault gate</b>, bring the <b>thermal drill</b> from the van and put it on the round vault door. Keep it running: when it jams, hold <b><span class="kbonly">E</span><span class="touchonly">USE</span></b> on it. Inside: <b>cash</b>, <b>gold</b> and <b>deposit boxes</b>. At <b>20:00</b> the reserve time-lock opens (more gold and <b>THE GOOGLY DIAMOND</b>). An <b>armored truck</b> parks out front at 13:00.</p>
+    <p><b>Loot:</b> bag it (hold <b><span class="kbonly">E</span><span class="touchonly">USE</span></b>), carry it to the van (gold is heavy!) or <b><span class="kbonly">Q</span><span class="touchonly">THROW</span></b> it. The van holds 8 bags, then drives off for a minute to drop them. Pile bags behind it while it's gone.</p>
+    <p><b>The police</b> come in waves once the alarm goes off: police, then SWAT, then heavy SWAT. Zap them with your stun blaster. If you go down, a teammate can help you up. If the police cuff you, you're back in 25 seconds (and lose half your pocket cash). Grab ammo and first aid at the back of the van.</p>
+    <p class="touchonly"><b>On a phone or tablet</b>: the <b>stick</b> on the left walks. Drag on the right to look. Hold <b>FIRE</b> to shoot (drag the same finger to aim). <b>AIM</b> zooms, <b>USE</b> does things (hold), then <b>SHOUT</b>, <b>MASK</b>, <b>THROW</b>, <b>RELOAD</b>, <b>JUMP</b>, <b>CROUCH</b>. Top right: 🏆 crew, 💬 chat, ☰ menu.</p>
+    <p class="tiny kbonly">WASD move · Mouse look · Shift sprint · Space jump · C crouch · Left click shoot · Right click aim · R reload · E (hold) use · F shout · G (hold) mask · Q throw bag · Tab crew · T chat · Esc menu</p>
+    <div class="row"><button class="back big green">GOT IT</button></div>
+  </div>
+</section>
+
+<div id="toast"></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
